@@ -176,6 +176,8 @@ class ViewerConfig(PrintableConfig):
     """the default websocket port to connect to"""
     ip_address: str = "127.0.0.1"
     """the ip address where the bridge server is running"""
+    ssl_certificate: Optional[str] = None
+    """optional path to SSL certificate in .pem format"""
     num_rays_per_chunk: int = 32768
     """number of rays per chunk to render with viewer"""
     max_num_display_images: int = 512

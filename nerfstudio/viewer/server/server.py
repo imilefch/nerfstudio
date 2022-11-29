@@ -11,10 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """Server bridge to faciliate interactions between python backend and javascript front end"""
 
 import sys
+import ssl
 from typing import List, Optional, Tuple
 
 import tornado.gen
@@ -34,7 +34,6 @@ from nerfstudio.viewer.server.state.state_node import StateNode
 
 class WebSocketHandler(tornado.websocket.WebSocketHandler):  # pylint: disable=abstract-method
     """Tornado websocket handler for receiving and sending commands from/to the viewer."""
-
     def __init__(self, *args, **kwargs):
         self.bridge = kwargs.pop("bridge")
         super().__init__(*args, **kwargs)
@@ -64,14 +63,23 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):  # pylint: disable=a
         if type_ == "write":
             # writes the data coming from the websocket
             find_node(self.bridge.state_tree, path).data = m["data"]
-            if m["path"] != "renderingState/camera" and m["path"] != "webrtc/offer":
+            if m["path"] != "renderingState/camera" and m[
+                    "path"] != "webrtc/offer":
                 # dispatch to the websockets if not a camera update!
                 # TODO(ethan): handle the camera properly!
                 # TODO: but don't update the current websocket
-                command = {"type": "write", "path": m["path"], "data": m["data"]}
+                command = {
+                    "type": "write",
+                    "path": m["path"],
+                    "data": m["data"]
+                }
                 packed_data = umsgpack.packb(command)
-                frames = ["write".encode("utf-8"), m["path"].encode("utf-8"), packed_data]
-                self.bridge.forward_to_websockets(frames, websocket_to_skip=self)
+                frames = [
+                    "write".encode("utf-8"), m["path"].encode("utf-8"),
+                    packed_data
+                ]
+                self.bridge.forward_to_websockets(frames,
+                                                  websocket_to_skip=self)
         elif type_ == "read":
             # reads and returns the data
             data = find_node(self.bridge.state_tree, path).data
@@ -80,7 +88,9 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):  # pylint: disable=a
             cmd_data = {
                 "type": "error",
                 "path": "",
-                "data": {"error": "Unknown command type: " + type_},
+                "data": {
+                    "error": "Unknown command type: " + type_
+                },
             }
             data = umsgpack.packb(cmd_data)
             self.write_message(data, binary=True)
@@ -100,7 +110,13 @@ class ZMQWebSocketBridge:
 
     context = zmq.Context()
 
-    def __init__(self, zmq_port: int, websocket_port: int, ip_address: str):
+    def __init__(
+        self,
+        zmq_port: int,
+        websocket_port: int,
+        ip_address: str,
+        ssl_certificate: Optional[str] = None,
+    ):
         self.zmq_port = zmq_port
         self.websocket_pool = set()
         self.app = self.make_app()
@@ -108,10 +124,15 @@ class ZMQWebSocketBridge:
 
         # zmq
         zmq_url = f"tcp://{ip_address}:{self.zmq_port:d}"
-        self.zmq_socket, self.zmq_stream, self.zmq_url = self.setup_zmq(zmq_url)
+        self.zmq_socket, self.zmq_stream, self.zmq_url = self.setup_zmq(
+            zmq_url)
 
         # websocket
         listen_kwargs = {"address": "0.0.0.0"}
+        if ssl_certificate:
+            ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+            ssl_ctx.load_cert_chain(ssl_certificate)
+            listen_kwargs["ssl_options"] = ssl_ctx
         self.app.listen(websocket_port, **listen_kwargs)
         self.websocket_port = websocket_port
         self.websocket_url = f"0.0.0.0:{self.websocket_port}"
@@ -125,7 +146,9 @@ class ZMQWebSocketBridge:
 
     def make_app(self):
         """Create a tornado application for the websocket server."""
-        return tornado.web.Application([(r"/", WebSocketHandler, {"bridge": self})])
+        return tornado.web.Application([(r"/", WebSocketHandler, {
+            "bridge": self
+        })])
 
     def handle_zmq(self, frames: List[bytes]):
         """Switch function that places commands in tree based on websocket command
@@ -137,7 +160,8 @@ class ZMQWebSocketBridge:
             self.zmq_socket.send(b"error: expected 3 frames")
             return
         type_ = frames[0].decode("utf-8")
-        path = list(filter(lambda x: len(x) > 0, frames[1].decode("utf-8").split("/")))
+        path = list(
+            filter(lambda x: len(x) > 0, frames[1].decode("utf-8").split("/")))
         data = frames[2]
 
         if type_ == "write":
@@ -155,8 +179,9 @@ class ZMQWebSocketBridge:
             self.zmq_socket.send(umsgpack.packb(b"error: unknown command"))
 
     def forward_to_websockets(
-        self, frames: Tuple[str, str, bytes], websocket_to_skip: Optional[WebSocketHandler] = None
-    ):
+            self,
+            frames: Tuple[str, str, bytes],
+            websocket_to_skip: Optional[WebSocketHandler] = None):
         """Forward a zmq message to all websockets.
 
         Args:
@@ -187,7 +212,9 @@ class ZMQWebSocketBridge:
         Args:
             websocket: websocket to send information over
         """
-        print("Sending entire scene state due to websocket connection established.")
+        print(
+            "Sending entire scene state due to websocket connection established."
+        )
         for path, node in walk("", self.state_tree):
             if node.data is not None:
                 command = {"type": "write", "path": path, "data": node.data}
@@ -198,9 +225,11 @@ class ZMQWebSocketBridge:
         self.ioloop.start()
 
 
-def run_viewer_bridge_server(
-    zmq_port: int = 6000, websocket_port: int = 7007, ip_address: str = "127.0.0.1", use_ngrok: bool = False
-):
+def run_viewer_bridge_server(zmq_port: int = 6000,
+                             websocket_port: int = 7007,
+                             ip_address: str = "127.0.0.1",
+                             use_ngrok: bool = False,
+                             ssl_certificate: Optional[str] = None):
     """Run the viewer bridge server.
 
     Args:
@@ -208,6 +237,8 @@ def run_viewer_bridge_server(
         websocket_port: port to use for websocket
         ip_address: host to connect to
         use_ngrok: whether to use ngrok to expose the zmq port
+        ssl_certificate: optional path to SSL certificate (.pem format)
+                         for creating an SSL-compliant websocket
     """
 
     # whether to launch pyngrok or not
@@ -217,7 +248,10 @@ def run_viewer_bridge_server(
         http_tunnel = ngrok.connect(addr=str(zmq_port), proto="tcp")
         print(http_tunnel)
 
-    bridge = ZMQWebSocketBridge(zmq_port=zmq_port, websocket_port=websocket_port, ip_address=ip_address)
+    bridge = ZMQWebSocketBridge(zmq_port=zmq_port,
+                                websocket_port=websocket_port,
+                                ip_address=ip_address,
+                                ssl_certificate=ssl_certificate)
     print(bridge)
     try:
         bridge.run()

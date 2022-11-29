@@ -38,6 +38,7 @@ def run_viewer_bridge_server_as_subprocess(
     zmq_port: Optional[int] = None,
     ip_address: str = "127.0.0.1",
     log_filename: Union[str, None] = None,
+    ssl_certificate: Optional[str] = None,
 ):
     """Runs the viewer bridge server as a subprocess.
 
@@ -66,6 +67,9 @@ def run_viewer_bridge_server_as_subprocess(
     args.append(str(websocket_port))
     args.append("--ip-address")
     args.append(str(ip_address))
+    if ssl_certificate:
+      args.append("--ssl-certificate")
+      args.append(str(ssl_certificate))
     # supress output if no log filename is specified
     logfile = open(  # pylint: disable=consider-using-with
         log_filename if log_filename else os.devnull, "w", encoding="utf8"

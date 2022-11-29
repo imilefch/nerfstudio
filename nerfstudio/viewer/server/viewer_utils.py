@@ -239,6 +239,7 @@ class ViewerState:
                 zmq_port=self.config.zmq_port,
                 ip_address=self.config.ip_address,
                 log_filename=str(self.log_filename),
+                ssl_certificate=self.config.ssl_certificate,
             )
             # TODO(ethan): log the output of the viewer bridge server in a file where the training logs go
             CONSOLE.line()
